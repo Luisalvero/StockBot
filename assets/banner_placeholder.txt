@@ -1,0 +1,10 @@
+This directory should contain the banner image used by the README.
+
+Place your banner image here as `banner.png`.
+
+Recommended steps:
+1. Resize the image to ~1200px width for best GitHub display (height can vary).
+2. Save the file as `banner.png` and drop it into this folder.
+3. Commit the image to the repo: `git add assets/banner.png; git commit -m "Add README banner"`
+
+If you want me to create a rasterized header from the colorful ASCII art you supplied, say so and I will generate a PNG and add it here automatically.
