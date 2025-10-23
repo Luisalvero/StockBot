@@ -1,117 +1,124 @@
+# ███████╗ ███╗   ███╗████████╗ ██████╗  ██████╗ ██████╗ ████████╗
+# ██╔══██╗████╗ ████║╚══██╔══╝██╔═══██╗██╔═══██╗██╔══██╗╚══██╔══╝
+# ███████║██╔████╔██║   ██║   ██║   ██║██║   ██║██████╔╝   ██║
+# ██╔══██║██║╚██╔╝██║   ██║   ██║   ██║██║   ██║██╔══██╗   ██║
+# ██║  ██║██║ ╚═╝ ██║   ██║   ╚██████╔╝╚██████╔╝██║  ██║   ██║
+# ╚═╝  ╚═╝╚═╝     ╚═╝   ╚═╝    ╚═════╝  ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+
 # stockbot — technical README
 
-This repository contains a Python-based experimental trading / research toolkit focused on LSTM-based predictive models for tick/market data and an opinionated live/demo runner. This README is written for technical users who want to understand internals, reproduce results, and safely customize the project.
+> Research-grade LSTM experiment runner for short-term market signals — built for reproducibility, customization, and exploratory production demos.
+
+Badges: ![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![License](https://img.shields.io/badge/license-MIT-lightgrey) ![Status](https://img.shields.io/badge/status-experimental-yellow)
+
+This repository contains a Python-based experimental trading / research toolkit focused on LSTM predictive models for tick/market data plus an opinionated live/demo runner. This README is written for technical users who want to understand internals, reproduce results, and safely customize the project.
 
 ## Table of contents
 
-- Project overview
-- Design contract (inputs, outputs, error modes)
-- Repository layout (file-by-file technical summary)
-- Data pipeline (raw -> features -> model-ready)
-- Model architecture & training (high-level + where to customize)
-- Running the project (env, commands, PowerShell tips)
-- Customization checklist (hyperparameters, data, model, storage)
-- Quality gates & testing recommendations
-- Deployment, performance & GPU tips
-- Troubleshooting
-- Next steps and suggested improvements
+- 📌 Project overview
+- 📐 Design contract (inputs, outputs, error modes)
+- 🗂 Repository layout (file-by-file technical summary)
+- 🔁 Data pipeline (raw → features → model-ready)
+- 🧠 Model architecture & training (what to expect + how to customize)
+- ▶️ Running the project (env, commands, PowerShell tips)
+- 🔧 Customization checklist (hyperparameters, data, model, storage)
+- ✅ Quality gates & testing recommendations
+- 🚀 Deployment, performance & GPU tips
+- 🐞 Troubleshooting
+- 🛡 Security & safe practices
+- 🧭 Next steps and suggested improvements
+- ✨ Credits & authors
 
 ---
 
 ## Project overview
 
-This project experiments with time-series forecasting (LSTM) for short-term market signals. It contains data, training scripts, exported models, a live/demo runner, a small database for market snapshots, and utilities for exporting results to CSV. The code favors clarity over production robustness and is intended for research, backtesting experiments, and prototyping live visualizations.
+This project is an experimental research toolkit for time-series forecasting using LSTM models targeting short-horizon market signals. It blends data preprocessing, model training, artifact management, and lightweight visualization into an easily forkable research repo.
 
-Key features:
+Core capabilities:
 
-- Data ingestion and simple preprocessing for tick-level data (`tick_data.csv`, `market_data.db`).
-- Training LSTM models and saving weights in Keras-compatible formats (`.h5`, `.keras`).
-- A scaler artifact (`scaler.pkl`) used at training and inference time.
-- Utilities for automated retraining and live plotting.
+- High-level ingestion from CSV / SQLite (`tick_data.csv`, `market_data.db`).
+- End-to-end preprocessing → sequence creation → LSTM training (`train_lstm_model.py`).
+- Model artifact management (Keras `.h5` / `.keras`) and scaler persistence (`scaler.pkl`).
+- Small orchestration for automated retrain/promote flows (`auto_trainer.py`) and CSV export (`export_to_csv.py`).
+- Demo & visualization runners (`MainDemo.py`, `Main.py`, `live_chart.py`) for interactive checks and plot-driven debugging.
 
-Note: The repository currently contains trained model files (`best_model.h5`, `final_model.h5`, etc). Treat them as artifacts — they are outputs, not source.
+Note: existing model artifacts (`best_model.h5`, `final_model.h5`, etc.) are outputs. Reproduce them by running the training pipeline with the same preprocessing and random seeds.
 
 ## Contract (short)
 
-- Inputs: tabular tick or candle CSV (`tick_data.csv`) or a SQLite `market_data.db` containing time-series rows. Expect at least columns: timestamp, price (or open/high/low/close), volume. Exact schema depends on preprocessing code inside `train_lstm_model.py` and `auto_trainer.py`.
-- Outputs: Keras model files (`*.h5`, `*.keras`), printed/logged metrics in `training_log.txt`, signals written to `signals.txt`, CSV exports from `export_to_csv.py`.
-- Data shapes: training uses sliding windows (lookback). Typical shape: (batch_size, lookback, feature_count). The final dense head produces either a scalar prediction (next price) or classification (direction).
-- Error modes: missing columns in data, mismatched scaler features, incompatible Keras/TensorFlow versions, GPU memory exhaustion during training.
+- Inputs: tabular tick/candle CSV (`tick_data.csv`) or SQLite (`market_data.db`). Minimal expected columns: timestamp, price (or O/H/L/C), and volume. See `train_lstm_model.py` preprocessing for exact names.
+- Outputs: trained Keras models (`*.h5`, `*.keras`), `scaler.pkl`, `training_log.txt`, `signals.txt`, and optional CSV exports.
+- Data shapes: training uses sliding windows: X shaped (N, LOOKBACK, n_features), y shaped (N, target_dim). Adjust `LOOKBACK`/`HORIZON` in training config.
+- Common failure modes: missing columns, scaler/feature mismatch, TF/Keras version incompatibility, GPU/CPU OOM, and accidental time-leakage when splitting data.
 
 ## Repository layout (technical)
 
-Top-level files (purpose):
+Files and their technical responsibilities (quick map):
 
-- `Main.py` — primary script to run the live/opinionated workflow (integration point). Reads current model and scaler, produces signals, may write to `signals.txt`.
-- `MainDemo.py` — a demo runner that can load demo inputs / run a local non-live flow for visualization or regression testing.
-- `train_lstm_model.py` — training script implementing the data preprocessing pipeline, model definition (LSTM), training loop and checkpoints. Primary customization point for model hyperparameters and architecture.
-- `auto_trainer.py` — orchestration script for scheduled or conditional retraining, model selection, and artifact rotation (e.g., promote best -> final).
-- `export_to_csv.py` — utility to read DB or raw ticks and export analysis/predictions to CSV for external backtest or inspection.
-- `live_chart.py` — visualization script using the selected model predictions for live plotting (matplotlib/pyplot likely).
-- `scaler.pkl` — saved preprocessor (scikit-learn StandardScaler or similar). Must be consistent between training and inference.
-- `market_data.db` — SQLite file that can store processed tick/candle rows.
-- `tick_data.csv` — example/raw dataset used for training and experimentation. Acts as a canonical input for preprocessing.
-- `signals.txt` — textual output of signals generated by `Main.py` or other run-time components.
-- `*.h5` and `*.keras` files (`best_model.h5`, `final_model.h5`, `lstm_model.h5`, `best_model.keras`, `final_model.keras`) — saved models; keep multiple versions when experimenting.
-- `requirements.txt` — pinned Python dependencies required to run the project (check this file before installing).
-- `training_log.txt` — plain text log of training runs (loss, metrics, timestamps).
-- `charts/training_curve.png` — example artifact showing training behaviour.
+- `Main.py` — integration runner. Loads model + scaler, runs inference loop, appends `signals.txt`.
+- `MainDemo.py` — offline/demo runner (deterministic inputs, for plotting & sanity checks).
+- `train_lstm_model.py` — preprocessing, sequence builder, model factory, training loop, checkpointing.
+- `auto_trainer.py` — simple orchestration for scheduled retrain/promote (cron-friendly).
+- `export_to_csv.py` — converts DB/tick inputs and predictions into CSV for downstream backtests.
+- `live_chart.py` — plotting utilities for live/demo visualization (matplotlib).
+- `scaler.pkl` — serialized preprocessing object (scikit-learn). Keep with model artifacts.
+- `market_data.db` — optional SQLite store for processed rows; used by `export_to_csv.py`.
+- `tick_data.csv` — example dataset and canonical training input.
+- `signals.txt` — append-only signal output for integration tests or downstream consumers.
+- Model artifacts: `*.h5`, `*.keras` (e.g., `best_model.h5`, `final_model.h5`).
+- `requirements.txt`, `training_log.txt`, `charts/`.
 
-If you add new modules, keep them small and unit-testable. Prefer functions that accept and return pure Python/numpy objects rather than using global state.
+Style guide: prefer small, pure functions and explicit data shapes. Add tests for any preprocessing or feature changes.
 
 ## Data pipeline (technical details)
 
-Typical pipeline implemented in `train_lstm_model.py` (canonical steps):
+Canonical pipeline (as implemented in `train_lstm_model.py`):
 
 1. Data ingestion
-   - Read either `tick_data.csv` or pull from `market_data.db`.
-   - Ensure timestamp column parsed to timezone-aware `datetime` if needed.
+   - Read `tick_data.csv` or pull rows from `market_data.db`.
+   - Parse timestamps to `datetime`, normalize timezone if mixing sources.
 2. Feature engineering
-   - Compute OHLC windows, returns, log-returns, moving averages, RSI, or user-specified indicators.
-   - Handle missing values via forward-fill or row dropping (configurable).
+   - Compute features (returns, log-returns, rolling means, RSI, etc.).
+   - Make feature list explicit and stable (store `feature_columns` alongside `scaler.pkl`).
 3. Scaling
-   - Fit a `scikit-learn` scaler (likely `StandardScaler` or `MinMaxScaler`) on training features and serialize to `scaler.pkl`.
-   - During inference, load `scaler.pkl` and apply transform to new data.
-4. Sliding-window sequence creation
-   - Create input sequences of length `LOOKBACK` producing targets at horizon `HORIZON`.
-   - Typical shapes: X -> (N_windows, LOOKBACK, n_features); y -> (N_windows, target_dim).
-5. Splitting
-   - Train/validation split is temporal (do NOT random-shuffle across time). Reserve contiguous validation slice to avoid leakage.
+   - Fit a `scikit-learn` scaler on training features and serialize to `scaler.pkl`.
+   - During inference load the same `scaler.pkl` and apply `transform`.
+4. Sequence creation
+   - Sliding window sequence builder: create samples of `LOOKBACK` timesteps mapped to a target at `HORIZON`.
+5. Temporal split
+   - Perform time-based train/val split to avoid leakage. Do not randomly shuffle across time.
 6. Training
-   - Build an LSTM (or stacked LSTMs), optional dropout, and a dense output.
-   - Use appropriate loss (MSE, MAE, or classification cross-entropy) and metrics.
-7. Checkpointing & selection
-   - Save the best model (validation-based) to `best_model.h5` and optionally promote to `final_model.h5`.
+   - Build model via a `build_model(config)` function (recommended). Train with callbacks (EarlyStopping, ModelCheckpoint).
+7. Checkpointing
+   - Save epoch-wise checkpoints, keep `best_model.h5` (val metric) and optionally `final_model.h5` (last epoch or promoted).
 
-Implementation notes:
+Notes:
 
-- Temporal split: prefer `train_index = data.index < split_time` rather than random train_test_split.
-- Keep scaler fit only on training set to avoid leakage.
-- Persist preprocessing metadata (feature order) to ensure runtime consistency.
+- Always fit scalers only on training data.
+- Persist feature order as metadata (simple JSON) to guarantee inference compatibility.
 
 ## Model architecture & where to customize
 
-Default architecture (what to expect): stacked LSTM layers followed by a Dense head. Example hyperparameters to look for in `train_lstm_model.py`:
+Default pattern: stacked LSTMs → optional Dropout/BatchNorm → Dense head. The training script should expose these hyperparams:
 
-- LOOKBACK (sequence length): number of timesteps used as input.
-- HORIZON (prediction horizon): number of steps ahead to predict.
-- BATCH_SIZE, EPOCHS, LEARNING_RATE.
-- LSTM units per layer: e.g., [64, 32].
-- DROPOUT rate.
-- LOSS function: 'mse' for regression, or a custom loss for directional accuracy.
+- LOOKBACK, HORIZON
+- BATCH_SIZE, EPOCHS, LEARNING_RATE
+- LSTM_UNITS (per layer), DROPOUT
+- LOSS & METRICS
 
-To customize:
+How to customize safely:
 
-1. Open `train_lstm_model.py` and find the config block at the top or a `parse_args()` section. If there isn't one, add a small `argparse` or config dict to parameterize runs.
-2. For architecture changes, look for code that builds the Keras model (calls to `tf.keras.layers.LSTM`, `Dense`, `Dropout`). Modify layer sizes or add BatchNormalization / Attention layers.
-3. To change objective (classification vs regression), swap the final activation and loss. For example, binary classification -> `sigmoid` + `binary_crossentropy`.
-4. When changing features, update `feature_columns` and refit a new `scaler.pkl` by re-running training.
+1. Add or use an existing `config` or `argparse` block in `train_lstm_model.py`.
+2. Refactor model construction into `build_model(config)` (returns compiled tf.keras.Model). Keep this in the file so experiments can swap factories.
+3. To change objective: change final activation + loss (e.g., `sigmoid` + `binary_crossentropy` for direction).
+4. When adding/removing features: update `feature_columns`, re-fit `scaler.pkl`, and stamp model artifacts with the metadata (feature list + git commit hash).
 
-Important: Whenever you update feature columns or their order, delete / re-create `scaler.pkl` and retrain models — the scaler encodes feature order and statistics.
+Pro tip: maintain a small JSON manifest per experiment with {features, lookback, seed, commit, model_path} for reproducibility.
 
 ## How to run (Windows PowerShell)
 
-Follow these steps for a reproducible environment. All commands below assume PowerShell (v5.1) on Windows.
+Quick reproducible steps (PowerShell v5.1):
 
 1) Create & activate a virtual environment
 
@@ -120,7 +127,11 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-If PowerShell blocks scripts, enable the current session: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process`.
+If PowerShell blocks activation, enable the session temporarily:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+```
 
 2) Install dependencies
 
@@ -129,30 +140,30 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-3) Quick sanity checks
+3) Sanity checks
 
 ```powershell
-python -c "import tensorflow as tf, sklearn; print(tf.__version__)"
+python -c "import tensorflow as tf, sklearn; print('tf', tf.__version__)"
 python -c "import pickle, pandas as pd; print('ok')"
 ```
 
-4) Train a model (edit hyperparams in `train_lstm_model.py` or via CLI if provided)
+4) Train (default)
 
 ```powershell
 python train_lstm_model.py
 ```
 
-Expected outputs: updated `training_log.txt`, `scaler.pkl`, and a model file `best_model.h5` or `final_model.h5`.
+Artifacts produced: `scaler.pkl`, `best_model.h5` (validation-best), entries to `training_log.txt`.
 
-5) Run the demo or live runner
+5) Run demo / runner / charts
 
 ```powershell
-python MainDemo.py    # demo mode
-python Main.py        # live/opinionated runner (ensure models/scaler are present)
-python live_chart.py  # visualization only
+python MainDemo.py    # offline demo
+python Main.py        # live/opinionated runner
+python live_chart.py  # plotting
 ```
 
-6) Export data
+6) Export CSV
 
 ```powershell
 python export_to_csv.py
@@ -160,80 +171,83 @@ python export_to_csv.py
 
 ## Customization checklist (practical)
 
-Where to change things and a safe workflow:
+Small checklist for safe experimentation:
 
-- To change TRAIN/VAL split: edit the time boundary in `train_lstm_model.py`. Use a date/time string or ratio and confirm with `pandas` slicing.
-- To change LOOKBACK / HORIZON: update variables near the top of `train_lstm_model.py`. After changes, remove old model artifacts.
-- To change features: update the list/columns used for X in the preprocessing block. Refit scaler.
-- To try another architecture: extract model-building code into a factory function like `build_model(config)` and wire in a small config YAML/JSON.
-- To run scheduled retraining: edit `auto_trainer.py` (looks for new data files or periodic retrain triggers). Add logging and safe-atomic file writes (write to temp file then rename).
+- TRAIN/VAL split: change the time boundary in `train_lstm_model.py` and verify slicing with `pandas`.
+- LOOKBACK / HORIZON: change values at the top of the training script; clear old artifacts after changes.
+- Feature set: edit `feature_columns` in preprocessing, then re-fit and save `scaler.pkl`.
+- Architecture: refactor model code into `build_model(config)`; add new factory implementations for experiments.
+- Automation: extend `auto_trainer.py` to add scheduling or webhook triggers; use atomic file operations for model promotion.
 
 Pro tips:
 
-- Keep an experiment folder (e.g., `experiments/<YYYY-MM-DD>-<notes>/`) with hyperparams, `scaler.pkl`, and model to reproduce runs.
-- Use deterministic seeds for numpy/tf to make small experiments reproducible: set `random.seed()`, `np.random.seed()`, and `tf.random.set_seed()` at the start of training.
+- Use an `experiments/` directory to store hyperparams + artifact snapshots for reproducibility.
+- Set deterministic seeds: `random`, `numpy`, and `tensorflow` seeds at the start of training.
 
 ## Quality gates & tests
 
-Minimal recommended checks before merging changes:
+Recommended checks before merging experiments or PRs:
 
-- Linting: add `flake8`/`ruff` and run on changed modules.
-- Type checks: add `mypy` if you start introducing typed APIs.
-- Unit tests: add tests for preprocessing (scaler fit/transform round trip), sequence creation, and a tiny end-to-end train smoke test that runs 1 epoch on a tiny dataset. Place them under `tests/` and use `pytest`.
+- Linting: run `ruff`/`flake8` on changed modules.
+- Type checks: optionally add `mypy` for public APIs.
+- Unit tests: add tests for preprocessing (scaler fit/transform), sequence creation, and a one-epoch smoke training run under `tests/` using `pytest`.
 
-Example smoke test (conceptual):
+Smoke test outline:
 
-- Build a deterministic 100-row sine-wave dataset.
-- Run the pipeline to make sequences of LOOKBACK=10.
-- Train 1 epoch with small batch.
-- Assert model saves and `scaler.pkl` exists.
+1. Generate a small deterministic sine-wave dataset (100 rows).
+2. Create sequences with LOOKBACK=10.
+3. Train 1 epoch with a reduced model.
+4. Assert presence of `scaler.pkl` and model artifact.
 
-CI suggestion (GitHub Actions):
-
-- Matrix: Python 3.10/3.11.
-- Steps: install deps, run lint, run the smoke test only (not full training).
+CI: GitHub Actions matrix for Python 3.10/3.11, run lint and smoke tests only.
 
 ## Performance, GPU & deployment tips
 
-- TensorFlow: If you rely on GPU, install matching `tensorflow`/`tensorflow-gpu` versions. On Windows, prefer wheels from official TF releases and ensure CUDA/cuDNN versions match.
-- Memory: use `tf.data.Dataset` with prefetch/batching when dataset grows.
-- Multi-GPU: use `tf.distribute.MirroredStrategy()` if you need parallel training.
-- Docker: for deterministic deployments, build a Docker image with pinned Python and TF CUDA drivers, then run training inside the container.
+- GPU: on Windows, pick TF wheel matching CUDA/cuDNN. Consider `tensorflow` >=2.10; match system drivers.
+- Memory: use `tf.data.Dataset` with `prefetch()` and `map()` to avoid loading full datasets in-memory.
+- Multi-GPU: use `tf.distribute.MirroredStrategy()`.
+- Docker: create a container with pinned Python and TF stack for reproducible runs.
 
-Example Dockerfile outline (conceptual; not included):
+Minimal Dockerfile sketch (useful for CI/experiments):
 
-- FROM python:3.10-slim
-- RUN pip install -r requirements.txt
-- COPY . /app
-- WORKDIR /app
-- ENTRYPOINT ["python", "Main.py"]
+```dockerfile
+FROM python:3.10-slim
+WORKDIR /app
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . /app
+ENTRYPOINT ["python", "Main.py"]
+```
 
 ## Troubleshooting
 
-- Incompatible model files: if saved with one TF/Keras version and loaded with another, you may see deserialization errors. Re-train or convert the model in the current runtime.
-- Scaler mismatch: if features changed, old `scaler.pkl` will transform incorrectly. Recreate scaler and retrain.
-- OOM during training: reduce batch size or model size; enable swap or use GPU with larger memory.
-- ExecutionPolicy errors when activating venv on PowerShell: run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process` in the same PowerShell session.
+- Model deserialization errors: caused by Keras/TensorFlow version drift. Re-train or convert model with current TF.
+- Scaler mismatch: change in feature order requires regenerating `scaler.pkl` and retraining.
+- OOM: lower batch size, reduce model units, or use gradient accumulation. For large data, stream with `tf.data.Dataset`.
+- PowerShell venv ExecutionPolicy: run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process`.
 
 ## Security & safe practices
 
-- Never commit secrets, API keys, or exchange credentials to the repo.
-- When deploying live trading code, incorporate kill-switches and dry-run modes to avoid unintended orders.
-- Keep models and predictions auditable: log model version hash and scaler metadata alongside generated signals.
+- Do NOT commit secrets or API keys.
+- Add dry-run and kill-switch modes before connecting to any broker.
+- Log model artifact identifier (e.g., filename + git commit hash) with each prediction for traceability.
 
 ## Suggested next steps & improvements
 
-1. Add a small `config.yaml` and a model factory so experiments can be run from config only.
-2. Create `tests/` with at least three unit tests: preprocessing, sequence generation, and a 1-epoch train smoke test.
-3. Add a reproducible Docker setup and a GitHub Actions workflow for CI smoke tests.
-4. Add an `experiments/` manifest that records hyperparams, git commit hash, and dataset snapshot for each run.
+1. Add `config.yaml` + a model factory for config-driven experiments.
+2. Create `tests/` with unit tests and a smoke training test.
+3. Add a Dockerfile and GitHub Actions workflow for CI smoke tests.
+4. Add an experiments manifest that records hyperparams, commit hash, and dataset snapshot.
 
 ## Appendix: Quick reference commands (PowerShell)
 
 Activate venv and install:
 
 ```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install --upgrade pip; pip install -r requirements.txt
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
 Train:
@@ -264,3 +278,11 @@ If you want, I can also:
 - create a Dockerfile + example GitHub Actions workflow.
 
 Tell me which of the above you'd like me to add next and I'll implement it.
+
+---
+
+## Credits ✨
+
+- Luis Alvero — Creditor, Main Developer
+
+All other contributors: please add your name and role with a PR. If you want a different credit label (Creator / Author / Maintainer), tell me and I'll update it.
