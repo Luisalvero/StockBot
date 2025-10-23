@@ -6,6 +6,16 @@
 # ╚═╝  ╚═╝╚═╝     ╚═╝   ╚═╝    ╚═════╝  ╚═════╝ ╚═╝  ╚═╝   ╚═╝
 
 # stockbot — technical README
+```text
+███████╗ ███╗   ███╗████████╗ ██████╗  ██████╗ ██████╗ ████████╗
+██╔══██╗████╗ ████║╚══██╔══╝██╔═══██╗██╔═══██╗██╔══██╗╚══██╔══╝
+███████║██╔████╔██║   ██║   ██║   ██║██║   ██║██████╔╝   ██║
+██╔══██║██║╚██╔╝██║   ██║   ██║   ██║██║   ██║██╔══██╗   ██║
+██║  ██║██║ ╚═╝ ██║   ██║   ╚██████╔╝╚██████╔╝██║  ██║   ██║
+╚═╝  ╚═╝╚═╝     ╚═╝   ╚═╝    ╚═════╝  ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+```
+
+# stockbot — technical README
 
 > Research-grade LSTM experiment runner for short-term market signals — built for reproducibility, customization, and exploratory production demos.
 
