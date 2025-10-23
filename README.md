@@ -290,20 +290,8 @@ Export CSV:
 python export_to_csv.py
 ```
 
----
-
-If you want, I can also:
-
-- add a small `tests/` folder with a smoke test and CI workflow, or
-- extract hyperparameters into a `config.yaml` and update training code to consume it, or
-- create a Dockerfile + example GitHub Actions workflow.
-
-Tell me which of the above you'd like me to add next and I'll implement it.
-
----
 
 ## Credits ✨
 
 - Luis Alvero — Creditor, Main Developer
 
-All other contributors: please add your name and role with a PR. If you want a different credit label (Creator / Author / Maintainer), tell me and I'll update it.
